@@ -1,0 +1,32 @@
+[
+  {
+    "id_alarma": "AL23072501",
+    "nombre_agente": "Juan Carlos P\u00e9rez Castillo",
+    "cedula_agente": "1723456789",
+    "nombre_victima": "Mar\u00eda Fernanda L\u00f3pez Ruiz",
+    "cedula_victima": "1712345678",
+    "informe_policial": "El 21 de julio de 2025 a las 22:15, en la calle Espejo del Centro Hist\u00f3rico de Quito, se produjo un intento de robo con intimidaci\u00f3n. El agresor forceje\u00f3 con la v\u00edctima para arrebatarle sus pertenencias, sin llegar a consumar el delito gracias a la r\u00e1pida intervenci\u00f3n de transe\u00fantes.",
+    "upc": {
+      "nombre": "UPC Centro Hist\u00f3rico",
+      "ubicacion": "Centro Hist\u00f3rico, Quito, Ecuador",
+      "latitud": "-0.2201641",
+      "longitud": "-78.5123274"
+    },
+    "agresores": [
+      {
+        "nombre": "Carlos Alberto Mart\u00ednez S\u00e1nchez",
+        "cedula": "1729876543"
+      }
+    ],
+    "testigos": [
+      {
+        "nombre": "Ana Teresa Torres Vega",
+        "cedula": "1701234567",
+        "version": "Vi al sospechoso merodear alrededor de la zona de parqueo antes de escuchar un fuerte estruendo."
+      }
+    ],
+    "id_caso": "CASO-0001",
+    "fecha_creacion": "2025-07-22T23:00:37.317716",
+    "estado": "Abierto"
+  }
+]

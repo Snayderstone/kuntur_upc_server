@@ -1,0 +1,10 @@
+[project]
+name = "kuntur-detector-api"
+version = "1.0.0"
+description = "API para gestión de casos de UPC en Ecuador"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.116.1",
+    "uvicorn>=0.35.0",
+]

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuntur Detector - Monitor de Alertas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            padding-top: 20px;
+            background: linear-gradient(135deg, #9370DB, #D8BFD8);
+            min-height: 100vh;
+        }
+        .navbar-brand img {
+            height: 40px;
+            margin-right: 10px;
+        }
+        .alert-card {
+            transition: transform 0.3s;
+            margin-bottom: 20px;
+            border-left: 5px solid #9370DB;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+        }
+        .alert-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .footer {
+            background: linear-gradient(to right, #5e35b1, #7c4dff);
+            color: white;
+            padding: 20px 0;
+            margin-top: 50px;
+        }
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            background-color: rgba(255, 255, 255, 0.9);
+        }
+        .btn-primary {
+            background-color: #6a41c9;
+            border-color: #5e35b1;
+        }
+        .btn-primary:hover {
+            background-color: #5e35b1;
+            border-color: #512da8;
+        }
+    </style>
+</head>
+<body>
+    <!-- Barra de navegación -->
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top" style="background: linear-gradient(to right, #5e35b1, #9575cd);">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <img src="/static/img/kuntur_logo.png" alt="Kuntur Logo"> Kuntur Detector
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/"><i class="fas fa-home"></i> Inicio</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/healthcheck"><i class="fas fa-heartbeat"></i> Estado</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Contenido principal -->
+    <div class="container" style="margin-top: 80px;">
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card text-white" style="background: linear-gradient(45deg, #6a41c9, #9b59b6);">
+                    <div class="card-body">
+                        <h1 class="card-title"><i class="fas fa-shield-alt"></i> Monitor de Alertas Kuntur Detector</h1>
+                        <p class="card-text">Sistema de monitoreo en tiempo real para las UPC de Ecuador</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header text-white" style="background: linear-gradient(to right, #7b4397, #9f5afd);">
+                        <h5><i class="fas fa-bell"></i> Alertas Detectadas</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if groups %}
+                            <div class="row">
+                                {% for id, files in groups.items() %}
+                                <div class="col-md-6 col-lg-4">
+                                    <div class="card alert-card">
+                                        <div class="card-body">
+                                            <h5 class="card-title">
+                                                <i class="fas fa-exclamation-triangle" style="color: #7b4397;"></i>
+                                                Alerta {{ id }}
+                                            </h5>
+                                            <p class="card-text">
+                                                <i class="fas fa-video"></i> Video disponible<br>
+                                                <i class="fas fa-table"></i> Datos disponibles
+                                            </p>
+                                            <a href="/alert/{{ id }}" class="btn btn-primary">
+                                                <i class="fas fa-eye"></i> Ver detalles
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> No se encontraron alertas en el sistema.
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Panel de Casos -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header text-white" style="background: linear-gradient(to right, #5e35b1, #8e44ad);">
+                        <h5><i class="fas fa-file-alt"></i> Casos Registrados</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="casos-container">
+                            <div class="text-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Cargando...</span>
+                                </div>
+                                <p>Cargando casos...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pie de página -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Kuntur Detector</h5>
+                    <p>Sistema de monitoreo de amenazas para UPC en Ecuador</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p>&copy; 2025 Kuntur Detector</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/get_data_user_detection.js"></script>
+    <script src="/static/js/db_upc.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Cargar casos
+        cargarCasos();
+        
+        // Función para cargar casos desde la API
+        async function cargarCasos() {
+            try {
+                const response = await fetch('/api/casos');
+                const casos = await response.json();
+                
+                mostrarCasos(casos);
+            } catch (error) {
+                console.error('Error al cargar casos:', error);
+                mostrarErrorCasos();
+            }
+        }
+        
+        // Función para mostrar casos en el panel
+        function mostrarCasos(casos) {
+            const container = document.getElementById('casos-container');
+            
+            if (casos.length === 0) {
+                container.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No hay casos registrados.
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            casos.forEach(caso => {
+                // Formatear fecha
+                const fecha = new Date(caso.fecha_creacion);
+                const fechaFormateada = fecha.toLocaleDateString('es-EC', { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                html += `
+                <div class="card mb-3 border-left-4" style="border-left: 4px solid #6a41c9;">
+                    <div class="card-body">
+                        <h6 class="card-title">
+                            <i class="fas fa-file-alt text-primary"></i> 
+                            ${caso.id_caso}
+                        </h6>
+                        <p class="card-text small">
+                            <span class="badge bg-secondary"><i class="fas fa-calendar"></i> ${fechaFormateada}</span>
+                            <span class="badge bg-info text-dark"><i class="fas fa-bell"></i> Alerta: ${caso.id_alarma}</span>
+                            <span class="badge bg-${caso.estado === 'Abierto' ? 'success' : 'warning'}">
+                                <i class="fas fa-${caso.estado === 'Abierto' ? 'lock-open' : 'lock'}"></i> 
+                                ${caso.estado}
+                            </span>
+                        </p>
+                        <p class="card-text small">
+                            <strong>Agente:</strong> ${caso.nombre_agente}<br>
+                            <strong>Víctima:</strong> ${caso.nombre_victima}
+                        </p>
+                        <button class="btn btn-sm btn-outline-primary" onclick="verDetalleCaso('${caso.id_caso}')">
+                            <i class="fas fa-eye"></i> Ver detalles
+                        </button>
+                    </div>
+                </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // Función para mostrar error al cargar casos
+        function mostrarErrorCasos() {
+            const container = document.getElementById('casos-container');
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i> 
+                    Error al cargar los casos. Por favor, intente más tarde.
+                </div>
+            `;
+        }
+        
+        // Función global para ver detalles de un caso (accesible desde el HTML)
+        window.verDetalleCaso = function(idCaso) {
+            // En una implementación real, esto abriría una vista detallada del caso
+            // Por ahora, solo mostraremos una alerta
+            alert(`Ver detalles del caso ${idCaso}`);
+            // Alternativa: window.location.href = `/caso/${idCaso}`;
+        };
+    });
+    </script>
+</body>
+</html>
