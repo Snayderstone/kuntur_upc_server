@@ -1,10 +1,17 @@
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Depends
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import json
+import os
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
+from pymongo import MongoClient
+from dotenv import load_dotenv
+from bson import ObjectId
+
+# Cargar variables de entorno
+load_dotenv()
 
 # Inicializar la aplicación FastAPI
 app = FastAPI(title="Kuntur Detector API", description="API para la gestión de casos para UPC de Ecuador")
@@ -18,19 +25,31 @@ app.add_middleware(
     allow_headers=["*"],  # Permite todos los headers
 )
 
-# Ya no necesitamos el directorio JS
-# JS_DIR = Path("./static/js")
-# JS_DIR.mkdir(exist_ok=True, parents=True)
+# Configuración de MongoDB
+MONGO_URI = os.getenv("MONGO_URI")
+DATABASE_NAME = os.getenv("DATABASE_NAME", "UPC")
+COLLECTION_NAME = os.getenv("COLLECTION_NAME", "alertas2")
 
-# Directorio para almacenar los casos en formato JSON
+# Clase para convertir ObjectId a str en respuestas JSON
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, ObjectId):
+            return str(o)
+        return super().default(o)
+
+# Conexión a MongoDB
+def get_db():
+    client = MongoClient(MONGO_URI)
+    db = client[DATABASE_NAME]
+    try:
+        yield db
+    finally:
+        client.close()
+
+# Para compatibilidad con código existente
 CASOS_DIR = Path("./static/data")
 CASOS_DIR.mkdir(exist_ok=True, parents=True)
 CASOS_FILE = CASOS_DIR / "casos.json"
-
-# Inicializar archivo de casos si no existe
-if not CASOS_FILE.exists():
-    with open(CASOS_FILE, "w") as f:
-        json.dump([], f)
 
 # Ubicación fija de una UPC en Quito (se mantiene por si se necesita para los casos)
 UPC_QUITO = {
@@ -135,12 +154,17 @@ fetch('http://0.0.0.0:8050/api/casos', {
     return HTMLResponse(content=html_content)
 
 @app.get("/healthcheck")
-def healthcheck():
+def healthcheck(db = Depends(get_db)):
     """Endpoint para verificar que el servidor esté funcionando correctamente"""
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+    try:
+        # Verificar conexión con MongoDB
+        db.command("ping")
+        return {"status": "ok", "timestamp": datetime.now().isoformat(), "database": "connected"}
+    except Exception as e:
+        return {"status": "error", "timestamp": datetime.now().isoformat(), "database": f"disconnected: {str(e)}"}
 
 @app.post("/api/casos")
-async def crear_caso(caso: Dict[str, Any] = Body(...)):
+async def crear_caso(caso: Dict[str, Any] = Body(...), db = Depends(get_db)):
     """Endpoint para crear un nuevo caso en la base de datos"""
     required_fields = ['id_alarma', 'nombre_agente', 'cedula_agente', 
                      'nombre_victima', 'cedula_victima', 'informe_policial']
@@ -154,20 +178,19 @@ async def crear_caso(caso: Dict[str, Any] = Body(...)):
         )
     
     try:
-        # Cargar casos existentes
-        casos = []
-        if CASOS_FILE.exists():
-            with open(CASOS_FILE, "r") as f:
-                try:
-                    casos = json.load(f)
-                except json.JSONDecodeError:
-                    casos = []
+        collection = db[COLLECTION_NAME]
         
         # Generar ID único con formato CASO-XXXX
-        next_id = 1
-        if casos:
-            max_id = max([int(caso["id_caso"].replace("CASO-", "")) for caso in casos if "id_caso" in caso])
-            next_id = max_id + 1
+        # Buscar el último ID en la colección
+        ultimo_caso = list(collection.find({}, {"id_caso": 1}).sort("id_caso", -1).limit(1))
+        
+        if ultimo_caso and "id_caso" in ultimo_caso[0]:
+            try:
+                next_id = int(ultimo_caso[0]["id_caso"].replace("CASO-", "")) + 1
+            except (ValueError, AttributeError):
+                next_id = 1
+        else:
+            next_id = 1
             
         caso_id = f"CASO-{next_id:04d}"
         
@@ -179,47 +202,126 @@ async def crear_caso(caso: Dict[str, Any] = Body(...)):
             "estado": "Abierto"
         }
         
-        # Agregar a la lista y guardar
-        casos.append(nuevo_caso)
-        with open(CASOS_FILE, "w") as f:
-            json.dump(casos, f, indent=2)
+        # Insertar en MongoDB
+        result = collection.insert_one(nuevo_caso)
+        
+        # Obtener el documento insertado
+        inserted_id = result.inserted_id
+        inserted_doc = collection.find_one({"_id": inserted_id})
+        
+        # Convertir ObjectId a string para la respuesta JSON
+        if inserted_doc and "_id" in inserted_doc:
+            inserted_doc["_id"] = str(inserted_doc["_id"])
             
-        return nuevo_caso
+        return inserted_doc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear caso: {str(e)}")
 
 @app.get("/api/casos")
-async def get_casos(id_caso: Optional[str] = None, id_alarma: Optional[str] = None):
+async def get_casos(id_caso: Optional[str] = None, id_alarma: Optional[str] = None, db = Depends(get_db)):
     """Endpoint para obtener todos los casos o filtrar por ID de caso o alarma"""
     try:
-        if not CASOS_FILE.exists():
-            return []
-            
-        with open(CASOS_FILE, "r") as f:
-            try:
-                casos = json.load(f)
-            except json.JSONDecodeError:
-                return []
-                
-        # Aplicar filtros si se especifican
+        collection = db[COLLECTION_NAME]
+        
+        # Construir filtro basado en parámetros
+        filtro = {}
         if id_caso:
-            casos = [caso for caso in casos if caso.get("id_caso") == id_caso]
+            filtro["id_caso"] = id_caso
         if id_alarma:
-            casos = [caso for caso in casos if caso.get("id_alarma") == id_alarma]
+            filtro["id_alarma"] = id_alarma
+        
+        # Ejecutar consulta
+        casos = list(collection.find(filtro))
+        
+        # Convertir ObjectId a string para la respuesta JSON
+        for caso in casos:
+            caso["_id"] = str(caso["_id"])
             
         return casos
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener casos: {str(e)}")
 
 @app.get("/api/casos/{id_caso}")
-async def get_caso(id_caso: str):
+async def get_caso(id_caso: str, db = Depends(get_db)):
     """Endpoint para obtener un caso específico por su ID"""
     try:
-        casos = await get_casos(id_caso=id_caso)
-        if not casos:
+        collection = db[COLLECTION_NAME]
+        caso = collection.find_one({"id_caso": id_caso})
+        
+        if not caso:
             raise HTTPException(status_code=404, detail=f"Caso {id_caso} no encontrado")
-        return casos[0]
+        
+        # Convertir ObjectId a string para la respuesta JSON
+        caso["_id"] = str(caso["_id"])
+        
+        return caso
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Error al obtener caso: {str(e)}")
+
+# Endpoint para obtener todos los informes de la colección "notificacion"
+@app.get("/api/informes")
+async def get_informes(db = Depends(get_db)):
+    """Endpoint para obtener todos los informes almacenados en la colección 'notificacion'"""
+    try:
+        # Obtener la colección de notificaciones
+        collection = db["notificacion"]
+        
+        # Consultar todos los documentos y convertirlos a formato serializable
+        informes = []
+        for doc in collection.find():
+            # Crear un nuevo diccionario con valores serializables
+            informe_serializable = {}
+            for key, value in doc.items():
+                # Convertir ObjectId a string
+                if isinstance(value, ObjectId):
+                    informe_serializable[key] = str(value)
+                # Manejar otros tipos de datos no serializables si fuera necesario
+                else:
+                    informe_serializable[key] = value
+            
+            informes.append(informe_serializable)
+        
+        return informes
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener informes: {str(e)}")
+
+# Nuevo endpoint para migrar datos del archivo JSON a MongoDB (útil para la transición)
+@app.post("/api/migrar-datos", status_code=201)
+async def migrar_datos(db = Depends(get_db)):
+    """Endpoint para migrar datos del archivo JSON a MongoDB"""
+    try:
+        # Ruta al archivo JSON
+        json_path = Path("./static/data/casos.json")
+        if not json_path.exists():
+            return {"message": "No hay archivo JSON para migrar", "migrados": 0}
+        
+        # Leer datos del archivo JSON
+        with open(json_path, "r") as f:
+            casos = json.load(f)
+        
+        if not casos:
+            return {"message": "No hay casos para migrar", "migrados": 0}
+        
+        # Obtener colección de MongoDB
+        collection = db[COLLECTION_NAME]
+        
+        # Migrar cada caso
+        inserted_count = 0
+        for caso in casos:
+            # Verificar si ya existe
+            if collection.find_one({"id_caso": caso.get("id_caso")}):
+                continue
+                
+            # Insertar en MongoDB
+            collection.insert_one(caso)
+            inserted_count += 1
+        
+        return {
+            "message": "Datos migrados correctamente",
+            "migrados": inserted_count,
+            "total": len(casos)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al migrar datos: {str(e)}")

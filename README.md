@@ -13,19 +13,32 @@ La API permite crear nuevos casos, obtener listados de casos existentes y consul
 - Endpoints para crear y consultar casos
 - Verificación de estado del servidor
 - Soporte CORS para integración con aplicaciones frontend (React Native)
-- Almacenamiento persistente de datos en archivos JSON
+- Almacenamiento persistente de datos en MongoDB
+- Migración opcional desde archivos JSON a MongoDB
 
 ## Requisitos
 
 - Python 3.13+
 - FastAPI
+- PyMongo
+- python-dotenv
 - Las dependencias se manejan con `uv`
 
 ## Instalación
 
 ```bash
 # Instalar dependencias
-uv add fastapi uvicorn
+uv add fastapi uvicorn pymongo python-dotenv
+```
+
+## Configuración de MongoDB
+
+Crea un archivo `.env` en la raíz del proyecto con las siguientes variables:
+
+```
+MONGO_URI=mongodb://usuario:contraseña@host:puerto/
+DATABASE_NAME=UPC
+COLLECTION_NAME=alertas2
 ```
 
 ## Ejecución
@@ -47,11 +60,12 @@ kuntur_upc_server/
 │   └── server.py           # API FastAPI
 │
 ├── static/
-│   ├── data/               # Almacenamiento de casos en formato JSON
+│   ├── data/               # Datos de ejemplo (antes usado para almacenamiento)
 │   ├── img/                # Imágenes utilizadas por la API
 │   └── js/                 # Código JavaScript para consumir la API
 │
 ├── main.py                 # Punto de entrada
+├── .env                    # Variables de entorno (MongoDB)
 ├── pyproject.toml          # Configuración del proyecto
 └── README.md
 ```
@@ -62,8 +76,8 @@ kuntur_upc_server/
 Muestra la documentación de la API
 
 ### GET /healthcheck
-Verifica el estado del servidor
-- Respuesta: `{"status": "ok", "timestamp": "2025-07-23T10:30:15.123456"}`
+Verifica el estado del servidor y la conexión con MongoDB
+- Respuesta: `{"status": "ok", "timestamp": "2025-07-23T10:30:15.123456", "database": "connected"}`
 
 ### POST /api/casos
 Crea un nuevo caso en la base de datos
@@ -85,3 +99,7 @@ Obtiene la lista de casos, opcionalmente filtrados
 Obtiene un caso específico por su ID
 - Parámetros de ruta:
   - `id_caso`: ID del caso a consultar
+
+### POST /api/migrar-datos
+Migra los datos desde el archivo JSON local a MongoDB
+- Respuesta: `{"message": "Datos migrados correctamente", "migrados": 5, "total": 10}`
